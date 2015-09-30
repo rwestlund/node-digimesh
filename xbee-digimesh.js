@@ -30,7 +30,7 @@ var XbeeDigiMesh = function(device, baud, data_callback, ready_callback) {
         xoff: false,
         xany: false,
         flowControl: false,
-        buffersize: 0,
+        bufferSize: 1,
         hupcl: false,
     }, 
     // on open event
@@ -52,49 +52,59 @@ var XbeeDigiMesh = function(device, baud, data_callback, ready_callback) {
         process.exit(1);
     });
 
+    // this will always receive one byte at a time, due to the SerialPort
+    // bufferSize = 1
+    var that = this;
     this.serial_port.on('data', function(data) {
-        console.log('length of data:', data.length);
+        // print the byte
+        //console.log(data.toString('hex'));
         var c = data[0];
-        // if we're starting a new packet
-        if (!receiving) {
-            if (c == START_BYTE) {
-                rx_buf[rx_buf_index++] = c;
-                receiving = true;
-            }
-            return;
-        }
-        // if we're receiving the length
-        if (receiving && rx_buff_index < 3) {
-            rx_buf[rx_buf_index++] = c;
-            // we have the length
-            if (rx_buf_index == 3) {
-                // add 4 bytes for start, length, and checksum
-                packet_length = (rx_buf[1]<<8 |rx_buf[2]) + 4;
-            }
-            return;
-        }
-        // finish out rest of packet
-        rx_buf[rx_buf_index++] = c;
-        // if we're done
-        if (rx_buf_index == packet_length) {
-            if (this.verify_checksum()) {
-                console.log('full packet received');
-            }
-            else {
-                console.error('malformed packet');
-            }
-        }
+        that.parse_byte(c);
 
     });
 }
 
-// look at rx_buf and decide whether packet is valid
-XbeeDigiMesh.prototype.verify_checksum = function() {
-    var sum = 0;
-    for (var i = 3; i < this.packet_length; i++) {
-        sum += this.rx_buf[i];
+// receive a new byte and add it to the incoming packet buffer
+XbeeDigiMesh.prototype.parse_byte = function(c) {
+    // if we're starting a new packet
+    if (!this.receiving) {
+        if (c === this.START_BYTE) {
+            console.log('start of packet');
+            this.rx_buf[this.rx_buf_index++] = c;
+            this.receiving = true;
+        }
+        else console.warn('discarding byte');
+        return;
     }
-    return (sum | 0xff) == 0;
+    // if we're receiving the length
+    if (this.receiving && this.rx_buf_index < 3) {
+        this.rx_buf[this.rx_buf_index++] = c;
+        // we have the length
+        if (this.rx_buf_index === 3) {
+            // add 4 bytes for start, length, and checksum
+            this.packet_length = (this.rx_buf[1]<<8 |this.rx_buf[2]) + 4;
+            //console.log('incoming packet total length:', this.packet_length);
+        }
+        return;
+    }
+    // finish out rest of packet
+    this.rx_buf[this.rx_buf_index++] = c;
+    // if we're done receiving bytes
+    if (this.rx_buf_index === this.packet_length) {
+
+        // if the checksum matches
+        if (this.rx_buf[this.rx_buf_index-1] ===
+            this.calc_checksum(this.rx_buf, 3, this.packet_length-1)) {
+            console.log('full packet received');
+            //TODO handle packet types
+        }
+        else {
+            console.error('malformed packet');
+        }
+        // ready for next packet
+        this.receiving = false;
+        this.rx_buf_index = 0;
+    }
 }
 
 // take a tx buffer and insert the checksum
@@ -103,7 +113,7 @@ XbeeDigiMesh.prototype.calc_checksum = function(buf, start, end) {
     for (var i = start; i < end; i++) {
         sum += buf[i];
     }
-    return sum & 0xff;
+    return (0xff - sum) & 0xff;
 }
 
 // take a buffer and write it to the serial port
