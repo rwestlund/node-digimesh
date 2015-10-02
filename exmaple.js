@@ -9,6 +9,7 @@ xbee.on('open', function() {
 
     // ask for node identifier string
     xbee.get_NI_string();
+    xbee.discover_nodes();
 });
 
 xbee.on('error', function(err) {
