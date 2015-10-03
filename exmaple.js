@@ -1,5 +1,5 @@
 'use strict';
-var XbeeDigiMesh = require('./xbee-digimesh');
+var XbeeDigiMesh = require('./digimesh');
 
 // connect to xbee
 var xbee = new XbeeDigiMesh('/dev/ttyU0', 9600);

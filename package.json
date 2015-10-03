@@ -1,9 +1,23 @@
 {
-    "description": "XBee communication via Digimesh protocol",
+    "name": "digimesh",
+    "version": "0.1.0",
+    "description": "XBee communication via the DigiMesh protocol",
+    "keywords": [ "xbee", "digimesh", "wireless", "iot" ],
+    "homepage": "https://github.com/rwestlund/node-digimesh",
+    "bugs": {
+        "url": "https://github.com/rwestlund/node-digimesh/issues",
+        "email": "rwestlun@gmail.com"
+    },
+    "license": "BSD-2-Clause",
     "author": {
         "name": "Randy Westlund",
         "email": "rwestlun@gmail.com",
         "url": "http://www.textplain.net"
+    },
+    "main": "digimesh",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/rwestlund/node-digimesh.git"
     },
     "dependencies": {
         "serialport": "1.7.4"
