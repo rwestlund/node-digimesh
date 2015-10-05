@@ -1,5 +1,14 @@
 'use strict';
 
+// TODO
+// need constants and strings for returning errors
+
+// update this.md_timeout with seconds taken from NT
+
+// when queue is full, I'm currently returning an error in the callback -- should I never call it and just return false?
+
+// testing suite
+
 // needed to inherit events
 var EventEmitter = require('events');
 var util = require('util');
@@ -7,10 +16,16 @@ var util = require('util');
 var SerialPort = require('serialport').SerialPort;
 
 // the main class
-var XbeeDigiMesh = function(device, baud) {
+// config:  device -- device node, eg /dev/ttyU0
+//          baud -- serial baud rate
+//          fire_events_and_callback -- whether to fire events when a callback was given
+var XbeeDigiMesh = function(config) {
+    if (typeof config !== 'object') return console.error('ERROR: config is not an oject');
     // e.g. /dev/ttyU0
-    this.device = device;
-    this.baud = baud;
+    this.device = config.device;
+    this.baud = config.baud;
+    // normally, if a callback is passed to a function, the corresponding event will not fire to prevent double-reporting
+    this.fire_events_and_callback = config.fire_events_and_callback;
 
     // receive buffer
     this.rx_buf = new Buffer(1024);
@@ -20,6 +35,14 @@ var XbeeDigiMesh = function(device, baud) {
     this.packet_length;
     // whether we're in the process of reading a packet
     this.receiving = false;
+    // last frame_id we used
+    this.last_frame_id = 0;
+    // dictionary mapping frame_ids to the callback we need to execute when we
+    // get the ACK/NACK -- null means no callback, undefined means empty slot
+    this.callback_queue = new Array(256);
+
+    // number of milliseconds before a Network Discover will timeout (default is 13000)
+    this.nd_timeout = 13000;
 
     // CONSTANTS
     // start delimiter
@@ -34,6 +57,8 @@ var XbeeDigiMesh = function(device, baud) {
     this.FRAME_TRANSMIT_REQUEST = 0x10;
     this.FRAME_TRANSMIT_STATUS = 0x8b;
     this.FRAME_RECEIVE_PACKET = 0x90;
+
+    this.ERR_QUEUE_FULL = 'ERR: Tx queue is full, try again later';
 
     // enable events
     EventEmitter.call(this);
@@ -78,7 +103,7 @@ util.inherits(XbeeDigiMesh, EventEmitter);
 
 // returned upon receipt of a normal message from another unit
 XbeeDigiMesh.prototype.handle_receive_packet = function(packet) {
-    console.log(packet.toString('hex').replace(/(.{2})/g, "$1 "));
+    //console.log(packet.toString('hex').replace(/(.{2})/g, "$1 "));
     var obj = {
         // frame_id used by source
         frame_id: packet[0],
@@ -86,101 +111,141 @@ XbeeDigiMesh.prototype.handle_receive_packet = function(packet) {
         source_addr: this.read_addr(packet, 1),
         // whether this was a broadcast or directed
         broadcast: packet[11] === 0x02,
-        // actual payload  TODO this should be a buffer, right?
-        data: packet.slice(12, packet.length), //.toString(),
+        data: packet.slice(12, packet.length),
     }
     this.emit('message_received', obj);
 }
 
 // this is returned for each transmit with a frame_id
 XbeeDigiMesh.prototype.handle_transmit_status = function(packet) {
-    var obj = {
-        // id used when sending packet (if not zero)
-        frame_id: packet[1],
+    var data = {
         // number of retries needed
         retries: packet[4],
         // 0 = success, others are errors
+        //TODO make object with code and desc fields
         delivery_status: packet[5],
         // whether the network needed to discover a new route
         discovery_needed: Boolean(packet[6]),
     };
-    this.emit('transmit_status', obj);
+    // find callback and call it
+    this.find_callback_helper('transmit_status', packet[1], data);
 }
 
-// emitted on boot or wake
+// Modem status is emitted on boot or wake
 XbeeDigiMesh.prototype.handle_modem_status = function(packet) {
+    // this is an unsolicited packet, so there's no callback
     this.emit('modem_status', packet[1]);
 }
 
 // returned after sending an AT command to a remote unit
 XbeeDigiMesh.prototype.handle_remote_at_command_response = function(packet) {
+    // TODO implement
     console.warn('unhandled remote AT command response');
 }
 
 // returned after sending an AT command to the local unit
 XbeeDigiMesh.prototype.handle_at_command_response = function(packet) {
     var frame_id = packet[1];
+    var data = {};
+
     // if there's an error
     if (packet[4]) {
         return this.emit('error', 'AT command error');
     }
     // if NI response
     if (packet[2] === 'N'.charCodeAt(0) && packet[3] == 'I'.charCodeAt(0)) {
-        this.emit('NI_string', {
-            frame_id: frame_id,
-            ni_string: packet.slice(5).toString()
-        });
+        // return simple NI string rather than an object
+        this.find_callback_helper('NI_string', frame_id, packet.slice(5).toString());
     }
     // if ND -- discover all nodes
     else if (packet[2] === 'N'.charCodeAt(0) && packet[3] === 'D'.charCodeAt(0)) {
-        console.log(packet.toString('hex').replace(/(.{2})/g, "$1 "));
+        //console.log(packet.toString('hex').replace(/(.{2})/g, "$1 "));
         // find index of NULL that terminates NI
-        //NOTE needs node 4
+        //NOTE Buffer.indexOf() needs node 4
         //var index = packet.indexOf(0x00, 13);
         var index = 15; while (packet[index]) { index++; }
 
-        var obj = {
-            // 16-bit, 0xfffe is unknown
-            network_addr: packet[5] << 8 | packet[6],
-            source_addr: this.read_addr(packet, 7),
-            ni_string: packet.slice(15, index).toString(),
-            // 16-bit, 0xfffe if no parent
-            parent_net_addr: packet[index+1] << 8 | packet[index+2],
-            // 0 = coordinator, 1 = router, 2 = end device
-            device_type: packet[index+3],
-            // one byte reserved for status
-            profile_id: packet[index+5] << 8 | packet[index+6],
-            manufacturer_id: packet[index+7] << 8 | packet[index+8],
+        // 16-bit, 0xfffe is unknown
+        data.network_addr = packet[5] << 8 | packet[6];
+        data.source_addr = this.read_addr(packet, 7);
+        data.ni_string = packet.slice(15, index).toString();
+        // 16-bit, 0xfffe if no parent
+        data.parent_net_addr = packet[index+1] << 8 | packet[index+2];
+        // 0 = coordinator, 1 = router, 2 = end device
+        data.device_type = packet[index+3];
+        // one byte reserved for status
+        data.profile_id = packet[index+5] << 8 | packet[index+6];
+        data.manufacturer_id = packet[index+7] << 8 | packet[index+8];
+
+        // as noted in the discover_nodes function, this needs special handling
+        var callback = this.callback_queue[frame_id];
+        // this should never happen
+        if (callback === undefined) {
+            this.emit('error', 'received transmit status for an invalid frame_id');
+            return console.err('received transmit status for an invalid frame_id');
         }
-        console.log(index+8, packet.length);
-        this.emit('node_discovered', obj);
+        // if we have a valid list, append this data object
+        else if (callback && typeof callback === 'object') {
+            callback.push(data);
+        }
+        // if there's no callback, or user wants event anyway
+        if (callback === null || this.fire_events_and_callback) {
+            this.emit('node_discovered', data);
+        }
     }
     else {
         console.warn('unhandled AT command response', packet.slice(2,4).toString());
     }
 }
 
+// Find the callback that corresponds to a particular frame_id, and call it
+XbeeDigiMesh.prototype.find_callback_helper = function(event_name, frame_id, data) {
+    // find callback for this frame_id
+    var callback = this.callback_queue[frame_id];
+    // if there's nothing there -- this should never happen
+    if (callback === undefined) {
+        this.emit('error', 'received transmit status for an invalid frame_id');
+        return console.err('received transmit status for an invalid frame_id');
+    }
+    // if there's a valid callback
+    else if (callback && typeof callback === 'function') {
+        callback(null, data);
+    }
+    // if there's no callback or the user wants the event anyway
+    if (callback === null || this.fire_events_and_callback) {
+        // send data via event
+        this.emit(event_name, data);
+    }
+    // finally, clear the callback and free the frame_id for reuse
+    this.callback_queue[frame_id] = undefined;
+    // now we know there's room or at least one more packet
+    this.emit('drain');
+}
+
+
 ////////////////////////////////////////////
 // TRANSMIT FUNCTIONS
 ////////////////////////////////////////////
 
-// send a general message from this XBee
+// Send a general message from this XBee
 // options: data -- Buffer of exact size filled with payload
-//          frame_id -- frame_id to use
 //          dest_addr -- 64-bit destination address
 //          broadcast -- whether to broadcast or use the dest_addr
-XbeeDigiMesh.prototype.send_message = function(options) {
+// callback -- callback to execute with return status
+XbeeDigiMesh.prototype.send_message = function(options, callback) {
     var len = 17 + options.data.length;
     var tx_buf = new Buffer(len+4);
-
     // pick which address to use
     var addr = options.broadcast ? this.BROADCAST_ADDRESS : options.dest_addr;
+    // get a valid frame_id or return error
+    var frame_id = this.get_next_frame_id();
+    if (!frame_id) return config.callback(this.ERR_QUEUE_FULL);
 
     tx_buf[0] = this.START_BYTE;
     tx_buf[1] = (len >> 8) & 0xff;
     tx_buf[2] = len & 0xff;
     tx_buf[3] = this.FRAME_TRANSMIT_REQUEST;
-    tx_buf[4] = options.frame_id;
+    tx_buf[4] = frame_id;
     this.write_addr(tx_buf, 5, addr);
     tx_buf[13] = 0xff;
     tx_buf[14] = 0xfe;
@@ -189,34 +254,57 @@ XbeeDigiMesh.prototype.send_message = function(options) {
     options.data.copy(tx_buf, 17);
     tx_buf[tx_buf.length-1] = this.calc_checksum(tx_buf, 3, tx_buf.length-1);
     this.write_buf(tx_buf);
+
+    // save callback or null for future use
+    this.callback_queue[frame_id] = callback || null;
 };
 
-// ask the xbee for it's Node Identifer string
-// options: frame_id -- frame_id to use
-XbeeDigiMesh.prototype.discover_nodes = function(options) {
-    var tx_buf = new Buffer(8);
-    tx_buf[0] = this.START_BYTE;
-    tx_buf[1] = 0x00;
-    tx_buf[2] = 0x04;
-    tx_buf[3] = this.FRAME_AT_COMMAND;
-    tx_buf[4] = options.frame_id;
-    tx_buf.write('ND', 5);
-    tx_buf[7] = this.calc_checksum(tx_buf, 3, tx_buf.length-1);
-    this.write_buf(tx_buf);
+// Ask the xbee to find all nodes on the network. This needs special handling
+// because it returns one message per node (all with the same frame_id).
+// Rather than callback after the first message, we callback after the timeout
+// value. In place of the callback, we store the list of responses on the
+// callback queue.
+XbeeDigiMesh.prototype.discover_nodes = function(callback) {
+    // store an empty list rather than the callback
+    var frame_id = this.at_command_helper('ND', []);
+    // if it didn't get send, get out
+    if (!frame_id) return;
+
+    // callback after this.nd_timeout ms
+    var that = this;
+    setTimeout(function() {
+        // deliver whatever nodes we've discovered
+        callback(null, that.callback_queue[frame_id]);
+        // clear frame_id
+        that.callback_queue[frame_id] = undefined;
+    },
+    this.nd_timeout);
+}
+// Ask the xbee for it's Node Identifer string
+XbeeDigiMesh.prototype.get_NI_string = function(callback) {
+    this.at_command_helper('NI', callback);
 }
 
-// ask the xbee for it's Node Identifer string
-// options: frame_id -- frame_id to use
-XbeeDigiMesh.prototype.get_NI_string = function(options) {
+// Helper function to build packets for AT commands
+XbeeDigiMesh.prototype.at_command_helper = function(command, callback) {
+    // get a valid frame_id or return error
+    var frame_id = this.get_next_frame_id();
+    if (!frame_id) return callback(this.ERR_QUEUE_FULL);
+
+    // build and send packet
     var tx_buf = new Buffer(8);
     tx_buf[0] = this.START_BYTE;
     tx_buf[1] = 0x00;
     tx_buf[2] = 0x04;
     tx_buf[3] = this.FRAME_AT_COMMAND;
-    tx_buf[4] = options.frame_id;
-    tx_buf.write('NI', 5);
+    tx_buf[4] = frame_id;
+    tx_buf.write(command, 5);
     tx_buf[7] = this.calc_checksum(tx_buf, 3, tx_buf.length-1);
     this.write_buf(tx_buf);
+
+    // save callback or null for future use
+    this.callback_queue[frame_id] = callback || null;
+    return frame_id;
 }
 
 
@@ -229,7 +317,7 @@ XbeeDigiMesh.prototype.parse_byte = function(c) {
     // if we're starting a new packet
     if (!this.receiving) {
         if (c === this.START_BYTE) {
-            console.log('start of packet');
+            //console.log('start of packet');
             this.rx_buf[this.rx_buf_index++] = c;
             this.receiving = true;
         }
@@ -256,7 +344,7 @@ XbeeDigiMesh.prototype.parse_byte = function(c) {
         // if the checksum matches
         if (this.rx_buf[this.rx_buf_index-1] ===
             this.calc_checksum(this.rx_buf, 3, this.packet_length-1)) {
-            console.log('full packet received');
+            //console.log('full packet received');
 
             // copy data to new buffer so this one can be reused
             var packet = new Buffer(this.rx_buf.slice(3, this.packet_length-1));
@@ -314,14 +402,14 @@ XbeeDigiMesh.prototype.write_buf = function(buf) {
             
         // print the buffer // DEBUG
         // TODO why does this have to be 'hex', but others need 16?
-        console.log(buf.toString('hex').replace(/(.{2})/g, "$1 "));
+        //console.log(buf.toString('hex').replace(/(.{2})/g, "$1 "));
 
         // write the tx buffer
         that.serial_port.write(buf, function(err, result) {
             if (err) {
                 that.emit('error', err);
             }
-            console.log('packet sent');
+            //console.log('packet sent');
         });
     });
 }
@@ -346,6 +434,15 @@ XbeeDigiMesh.prototype.write_addr = function(buf, index, addr) {
         buf[index+i] = parseInt(addr.slice(2*i, 2*i+2), 16);
     }
     return addr;
+}
+
+// Look at last frame_id we used and return the next one, rolling over.
+// Values range from 1 to 255, inclusive
+XbeeDigiMesh.prototype.get_next_frame_id = function() {
+    this.last_frame_id++;
+    if (this.last_frame_id > 255) this.last_frame_id = 1;
+    return this.last_frame_id;
+    // TODO check whether it's being used
 }
 
 
