@@ -7,10 +7,16 @@ var xbee = new XbeeDigiMesh({ device: '/dev/ttyU0', baud: 9600 });
 xbee.on('open', function() {
     console.log('looks like xbee is ready');
 
-    // ask for node identifier string
-    xbee.get_NI_string(function(err, ni) {
+    xbee.set_ni_string('sdlfk', function(err, result) {
         if (err) return console.err(err);
-        console.log("my NI is '" + ni + "'");
+        console.log('result:');
+        console.dir(result);
+
+        // ask for node identifier string
+        xbee.get_ni_string(function(err, data) {
+            if (err) return console.err(err);
+            console.log("my NI is '" + data.ni + "'");
+        });
     });
 
     console.log('looking for nodes...');
@@ -37,7 +43,7 @@ xbee.on('error', function(err) {
     process.exit(1);
 });
 
-xbee.on('NI_string', function(ni) {
+xbee.on('ni_string', function(ni) {
     console.log("my NI is '", ni, "'");
 });
 

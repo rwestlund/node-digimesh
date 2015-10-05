@@ -154,8 +154,9 @@ XbeeDigiMesh.prototype.handle_at_command_response = function(packet) {
     }
     // if NI response
     if (packet[2] === 'N'.charCodeAt(0) && packet[3] == 'I'.charCodeAt(0)) {
-        // return simple NI string rather than an object
-        this.find_callback_helper('NI_string', frame_id, packet.slice(5).toString());
+        data.ni = packet.slice(5).toString();
+        data.status = packet[4];
+        this.find_callback_helper('ni_string', frame_id, data);
     }
     // if ND -- discover all nodes
     else if (packet[2] === 'N'.charCodeAt(0) && packet[3] === 'D'.charCodeAt(0)) {
@@ -281,25 +282,37 @@ XbeeDigiMesh.prototype.discover_nodes = function(callback) {
     this.nd_timeout);
 }
 // Ask the xbee for it's Node Identifer string
-XbeeDigiMesh.prototype.get_NI_string = function(callback) {
+XbeeDigiMesh.prototype.get_ni_string = function(callback) {
     this.at_command_helper('NI', callback);
 }
+// Set the xbee's Node Identifier string
+XbeeDigiMesh.prototype.set_ni_string = function(ni, callback) {
+    this.at_command_helper('NI', callback, new Buffer(ni));
+}
+
 
 // Helper function to build packets for AT commands
-XbeeDigiMesh.prototype.at_command_helper = function(command, callback) {
+// command:     AT command string
+// callback:    callback function to queue up
+// data:        optional command parameter Buffer
+XbeeDigiMesh.prototype.at_command_helper = function(command, callback, data) {
     // get a valid frame_id or return error
     var frame_id = this.get_next_frame_id();
     if (!frame_id) return callback(this.ERR_QUEUE_FULL);
+    // length of parameter value
+    var param_len = data ? data.length : 0;
 
     // build and send packet
-    var tx_buf = new Buffer(8);
+    var tx_buf = new Buffer(8 + param_len);
     tx_buf[0] = this.START_BYTE;
-    tx_buf[1] = 0x00;
-    tx_buf[2] = 0x04;
+    tx_buf[1] = param_len >> 8;
+    tx_buf[2] = (0x04 + param_len) & 0xff;
     tx_buf[3] = this.FRAME_AT_COMMAND;
     tx_buf[4] = frame_id;
     tx_buf.write(command, 5);
-    tx_buf[7] = this.calc_checksum(tx_buf, 3, tx_buf.length-1);
+    // if we have a parameter, copy it over
+    if (data) data.copy(tx_buf, 7)
+    tx_buf[7 + param_len] = this.calc_checksum(tx_buf, 3, tx_buf.length-1);
     this.write_buf(tx_buf);
 
     // save callback or null for future use
