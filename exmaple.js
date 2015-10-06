@@ -2,39 +2,31 @@
 var XbeeDigiMesh = require('./digimesh');
 
 // connect to xbee
-var xbee = new XbeeDigiMesh({ device: '/dev/ttyU0', baud: 9600 });
-
-xbee.on('open', function() {
+var xbee = new XbeeDigiMesh({ device: '/dev/ttyU0', baud: 115200 }, function() {
     console.log('looks like xbee is ready');
 
-    xbee.set_ni_string('sdlfk', function(err, result) {
+    // ask for node identifier string
+    xbee.get_ni_string(function(err, data) {
         if (err) return console.err(err);
-        console.log('result:');
-        console.dir(result);
-
-        // ask for node identifier string
-        xbee.get_ni_string(function(err, data) {
-            if (err) return console.err(err);
-            console.log("my NI is '" + data.ni + "'");
-        });
+        console.log("my NI is '" + data.ni + "'");
     });
 
     console.log('looking for nodes...');
-    xbee.discover_nodes(function(err, data) {
+    xbee.discover_nodes(function(err, nodes) {
         if (err) return console.err(err);
-        console.dir(data);
-
-        xbee.send_message({
-            data: new Buffer("hello"),
-            dest_addr: data[0].source_addr,
-            broadcast: false,
-        },
-        // callback
-        function(err, data) {
-            if (err) return console.error(err);
-            console.dir(data);
-        });
-
+        console.dir(nodes);
+        if (nodes.length) {
+            xbee.send_message({
+                data: new Buffer("hello"),
+                addr: nodes[0].addr,
+                broadcast: false,
+            },
+            // callback
+            function(err, data) {
+                if (err) return console.error(err);
+                console.dir(data);
+            });
+        }
     });
 });
 
@@ -49,11 +41,11 @@ xbee.on('ni_string', function(ni) {
 
 xbee.on('node_discovered', function(data) {
     console.dir(data);
-    console.log('saying hello to', data.source_addr);
+    console.log('saying hello to', data.addr);
 
     xbee.send_message({
         data: new Buffer("hello"),
-        dest_addr: data.source_addr,
+        addr: data.addr,
         broadcast: false,
     });
 });
