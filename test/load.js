@@ -1,8 +1,12 @@
+// Copyright (c) 2015 Randy Westlund, All rights reserved.
+// This code is under the BSD-2-Clause license.
+
+'use strict';
 var expect = require('chai').expect;
 var async = require('async');
 
 // Testing with a heavy load
-describe("Heavy load", function() {
+describe("Heavy Load", function() {
     describe("AT command flood", function() {
         it("should handle 255 AT commands", function(done) {
             this.timeout(30000);

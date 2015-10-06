@@ -1,3 +1,7 @@
+// Copyright (c) 2015 Randy Westlund, All rights reserved.
+// This code is under the BSD-2-Clause license.
+
+'use strict';
 var expect = require('chai').expect;
 
 // Test AT commands with the local xbee

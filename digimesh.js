@@ -1,5 +1,7 @@
-'use strict';
+// Copyright (c) 2015 Randy Westlund, All rights reserved.
+// This code is under the BSD-2-Clause license.
 
+'use strict';
 // TODO
 // when queue is full, I'm currently returning an error in the callback -- should I never call it and just return false?
 
@@ -62,37 +64,47 @@ var XbeeDigiMesh = function(config, callback) {
     this.DELIVERY_STATUS_INVALID_ADDR = 0x15;
     this.DELIVERY_STATUS_NETWORK_ACK_FAILURE = 0x21;
     this.DELIVERY_STATUS_ROUTE_NOT_FOUND = 0x25;
-    this.DELIVERY_STATUS_STRINGS = {
-        DELIVERY_STATUS_SUCCESS: 'success',
-        DELIVERY_STATUS_MAC_ACK_FAILURE: 'MAC ACK failure',
-        DELIVERY_STATUS_INVALID_ADDR: 'invalid addess',
-        DELIVERY_STATUS_NETWORK_ACK_FAILURE: 'network ACK failure',
-        DELIVERY_STATUS_ROUTE_NOT_FOUND: 'route not found',
-    };
+    this.DELIVERY_STATUS_STRINGS = {};
+    this.DELIVERY_STATUS_STRINGS[this.DELIVERY_STATUS_SUCCESS]
+        = 'success',
+    this.DELIVERY_STATUS_STRINGS[this.DELIVERY_STATUS_MAC_ACK_FAILURE]
+        = 'MAC ACK failure',
+    this.DELIVERY_STATUS_STRINGS[this.DELIVERY_STATUS_INVALID_ADDR]
+        = 'invalid addess',
+    this.DELIVERY_STATUS_STRINGS[this.DELIVERY_STATUS_NETWORK_ACK_FAILURE]
+        = 'network ACK failure',
+    this.DELIVERY_STATUS_STRINGS[this.DELIVERY_STATUS_ROUTE_NOT_FOUND]
+        = 'route not found',
 
     // modem_status fields
     this.MODEM_STATUS_HARDWARE_RESET = 0x00;
-    this.MODEM_STATUS_WATCHDOG_RESET = 0x00;
-    this.MODEM_STATUS_NETWORK_WAKE = 0x00;
-    this.MODEM_STATUS_NETWORK_SLEEP = 0x00;
-    this.MODEM_STATUS_STRINGS = {
-        MODEM_STATUS_HARDWARE_RESET: 'hardware reset',
-        MODEM_STATUS_WATCHDOG_RESET: 'watchdog reset',
-        MODEM_STATUS_NETWORK_WAKE: 'network wake',
-        MODEM_STATUS_NETWORK_SLEEP: 'network sleep',
-    };
+    this.MODEM_STATUS_WATCHDOG_RESET = 0x01;
+    this.MODEM_STATUS_NETWORK_WAKE = 0x0b;
+    this.MODEM_STATUS_NETWORK_SLEEP = 0x0c;
+    this.MODEM_STATUS_STRINGS = {};
+    this.MODEM_STATUS_STRINGS[this.MODEM_STATUS_HARDWARE_RESET]
+        = 'hardware reset',
+    this.MODEM_STATUS_STRINGS[this.MODEM_STATUS_WATCHDOG_RESET]
+        = 'watchdog reset',
+    this.MODEM_STATUS_STRINGS[this.MODEM_STATUS_NETWORK_WAKE]
+        = 'network wake',
+    this.MODEM_STATUS_STRINGS[this.MODEM_STATUS_NETWORK_SLEEP]
+        = 'network sleep',
 
     // AT command response status
     this.AT_COMMAND_RESPONSE_STATUS_OK = 0x00;
     this.AT_COMMAND_RESPONSE_STATUS_ERR = 0x01;
     this.AT_COMMAND_RESPONSE_STATUS_INVALID_COMMAND = 0x02;
     this.AT_COMMAND_RESPONSE_STATUS_INVALID_PARAM = 0x03;
-    this.AT_COMMAND_RESPONSE_STATUS_STRINGS = {
-        AT_COMMAND_RESPONSE_STATUS_OK: 'success',
-        AT_COMMAND_RESPONSE_STATUS_ERR: 'error',
-        AT_COMMAND_RESPONSE_STATUS_INVALID_COMMAND: 'invalid command',
-        AT_COMMAND_RESPONSE_STATUS_INVALID_PARAM: 'invalid parameter',
-    };
+    this.AT_COMMAND_RESPONSE_STATUS_STRINGS = {};
+    this.AT_COMMAND_RESPONSE_STATUS_STRINGS[this.AT_COMMAND_RESPONSE_STATUS_OK]
+        = 'success',
+    this.AT_COMMAND_RESPONSE_STATUS_STRINGS[this.AT_COMMAND_RESPONSE_STATUS_ERR]
+        = 'error',
+    this.AT_COMMAND_RESPONSE_STATUS_STRINGS[
+        this.AT_COMMAND_RESPONSE_STATUS_INVALID_COMMAND] = 'invalid command',
+    this.AT_COMMAND_RESPONSE_STATUS_STRINGS[
+        this.AT_COMMAND_RESPONSE_STATUS_INVALID_PARAM] = 'invalid parameter',
 
     // enable events
     EventEmitter.call(this);
@@ -164,7 +176,7 @@ XbeeDigiMesh.prototype.handle_transmit_status = function(packet) {
         // number of retries needed
         retries: packet[4],
         // 0 = success, others are errors
-        delivery_status: packet[5],
+        status: packet[5],
         // whether the network needed to discover a new route
         discovery_needed: Boolean(packet[6]),
     };

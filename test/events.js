@@ -1,3 +1,7 @@
+// Copyright (c) 2015 Randy Westlund, All rights reserved.
+// This code is under the BSD-2-Clause license.
+
+'use strict';
 var expect = require('chai').expect;
 var sinon = require('sinon');
 
@@ -39,7 +43,7 @@ describe("Events", function() {
                 expect(spy.calledOnce).to.be.true;
                 expect(spy.firstCall.args[0]).to.have.ownProperty('retries');
                 expect(spy.firstCall.args[0]).to.have.ownProperty('discovery_needed');
-                expect(spy.firstCall.args[0].delivery_status)
+                expect(spy.firstCall.args[0].status)
                     .to.equal(that.xbee.DELIVERY_STATUS_SUCCESS);
                 done();
             }, 1000);
@@ -73,7 +77,7 @@ describe("Events", function() {
                 expect(spy.calledOnce).to.be.true;
                 expect(spy.firstCall.args[0]).to.have.ownProperty('retries');
                 expect(spy.firstCall.args[0]).to.have.ownProperty('discovery_needed');
-                expect(spy.firstCall.args[0].delivery_status)
+                expect(spy.firstCall.args[0].status)
                     .to.equal(that.xbee.DELIVERY_STATUS_SUCCESS);
                 that.xbee.always_fire_event = false;
                 done();

@@ -1,7 +1,11 @@
+// Copyright (c) 2015 Randy Westlund, All rights reserved.
+// This code is under the BSD-2-Clause license.
+
+'use strict';
 var expect = require('chai').expect;
 
 // Test sending messages to other units
-describe("Messaging other units", function() {
+describe("Messaging Other Units", function() {
     // a discovered node that we'll bounce messages off of
     var neighbor;
 
@@ -34,7 +38,7 @@ describe("Messaging other units", function() {
                 expect(err).to.be.null;
                 expect(result).to.have.ownProperty('retries');
                 expect(result).to.have.ownProperty('discovery_needed');
-                expect(result.delivery_status).to.equal(that.xbee.DELIVERY_STATUS_SUCCESS);
+                expect(result.status).to.equal(that.xbee.DELIVERY_STATUS_SUCCESS);
                 done();
             });
         });
@@ -50,7 +54,7 @@ describe("Messaging other units", function() {
                 expect(result).to.have.ownProperty('retries');
                 expect(result).to.have.ownProperty('discovery_needed');
                 expect(result.discovery_needed).to.be.true;
-                expect(result.delivery_status)
+                expect(result.status)
                     .to.equal(that.xbee.DELIVERY_STATUS_ROUTE_NOT_FOUND);
                 done();
             });
