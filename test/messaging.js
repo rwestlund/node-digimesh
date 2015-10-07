@@ -12,7 +12,7 @@ describe("Messaging Other Units", function() {
     describe("#discover_nodes", function() {
         it("should return a list of nodes", function(done) {
             // ND is a long process
-            this.timeout(this.xbee.nt_timeout + 1000);
+            this.timeout(this.xbee.nt_timeout + 2000);
             this.xbee.discover_nodes(function(err, nodes) {
                 expect(err).to.be.null;
                 expect(nodes.length).to.be.above(0);

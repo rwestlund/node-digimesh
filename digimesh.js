@@ -2,9 +2,6 @@
 // This code is under the BSD-2-Clause license.
 
 'use strict';
-// TODO
-// when queue is full, I'm currently returning an error in the callback -- should I never call it and just return false?
-
 // needed to inherit events
 var EventEmitter = require('events');
 var util = require('util');
@@ -344,9 +341,10 @@ XbeeDigiMesh.prototype.discover_nodes = function(callback) {
             // pass all our discovered nodes to callback
             callback(null, that.callback_queue[frame_id]);
             // clear frame_id
-            that.callback_queue[frame_id] = undefined;
+            this.free_frame_id(frame_id);
         },
-        this.nt_timeout);
+        // add 1 second as fudge factor
+        this.nt_timeout + 1000);
     }
     // if no callback
     else {
