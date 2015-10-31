@@ -158,8 +158,10 @@ XbeeDigiMesh.prototype.handle_receive_packet = function(packet) {
     var data = {
         // frame_id used by source
         frame_id: packet[1],
-        // address of source unit
-        addr: this.read_addr(packet, 2),
+        // Read address of source unit. Contrary to the datasheet, there is no
+        // frame_id in an Rx packet; it's the MSB of the address. So we start a
+        // byte early
+        addr: this.read_addr(packet, 1),
         // whether this was a broadcast or directed
         broadcast: packet[11] === 0x02,
         data: packet.slice(12, packet.length),
@@ -341,7 +343,7 @@ XbeeDigiMesh.prototype.discover_nodes = function(callback) {
             // pass all our discovered nodes to callback
             callback(null, that.callback_queue[frame_id]);
             // clear frame_id
-            this.free_frame_id(frame_id);
+            that.free_frame_id(frame_id);
         },
         // add 1 second as fudge factor
         this.nt_timeout + 1000);
@@ -381,7 +383,7 @@ XbeeDigiMesh.prototype.at_command_helper = function(command, callback, data) {
     // build and send packet
     var tx_buf = new Buffer(8 + param_len);
     tx_buf[0] = this.START_BYTE;
-    tx_buf[1] = param_len >> 8;
+    tx_buf[1] = (0x04 + param_len) >> 8;
     tx_buf[2] = (0x04 + param_len) & 0xff;
     tx_buf[3] = this.FRAME_AT_COMMAND;
     tx_buf[4] = frame_id;
