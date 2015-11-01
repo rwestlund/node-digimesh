@@ -37,8 +37,8 @@ npm install digimesh
 ## Testing
 
 Testing is done with `mocha`, `chai`, and `sinon`.  Set the environment
-variables `XBEE_DEVICE` and `XBEE_BAUD`, then run `mocha`.  You must
-have at least one other XBee on the network to bounce messages off of.
+variables `XBEE_DEVICE` and `XBEE_BAUD`, then run `npm test` or `mocha`.  You
+must have at least one other XBee on the network to bounce messages off of.
 
 ## Usage
 
