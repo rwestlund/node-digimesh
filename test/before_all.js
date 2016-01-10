@@ -9,6 +9,7 @@ before(function(done) {
     // set defaults
     process.env.XBEE_DEVICE = process.env.XBEE_DEVICE || "/dev/ttyU0";
     process.env.XBEE_BAUD = process.env.XBEE_BAUD || 115200;
+    this.timeout(5000);
 
     // setup the xbee, store it in 'this' so other tests can use it
     this.xbee = new digimesh({
