@@ -38,6 +38,10 @@ var XbeeDigiMesh = function(config, callback) {
 
     // number of milliseconds before a Network Discover will timeout (default is 13000)
     this.nt_timeout = 13000;
+    // address of local unit, filled in below
+    this.address;
+    // buffer version of address
+    this.address_buf = new Buffer(8);
 
     // CONSTANTS
     // start delimiter
@@ -120,11 +124,27 @@ var XbeeDigiMesh = function(config, callback) {
     }, 
     // on open event
     function(err) {
+        // call when all three are done
+        var complete = function() {
+            that.address = that.read_addr(that.address_buf, 0);
+            that.emit('open', err);
+        }
+        var num_complete = 0;
+
+        // set up with three functions:
         // update our NT value, drop the return status
         that.get_nt(function(err, data) {
             // pass err to callback
             if (callback && typeof callback === 'function') callback(err);
-            that.emit('open', err);
+
+            num_complete++; if (num_complete === 3) complete();
+        });
+        // get high and low parts of local address
+        that.at_command_helper('SH', function() {
+            num_complete++; if (num_complete === 3) complete();
+        });
+        that.at_command_helper('SL', function() {
+            num_complete++; if (num_complete === 3) complete();
         });
     });
 
@@ -156,11 +176,8 @@ util.inherits(XbeeDigiMesh, EventEmitter);
 XbeeDigiMesh.prototype.handle_receive_packet = function(packet) {
     //console.log(packet.toString('hex').replace(/(.{2})/g, "$1 "));
     var data = {
-        // frame_id used by source
-        frame_id: packet[1],
-        // Read address of source unit. Contrary to the datasheet, there is no
-        // frame_id in an Rx packet; it's the MSB of the address. So we start a
-        // byte early
+        // Read address of source unit. An old datasheet documented this
+        // incorrectly.
         addr: this.read_addr(packet, 1),
         // whether this was a broadcast or directed
         broadcast: packet[11] === 0x02,
@@ -218,6 +235,17 @@ XbeeDigiMesh.prototype.handle_at_command_response = function(packet) {
             this.nt_timeout = data.timeout;
         this.find_callback_helper('nt_timeout', frame_id, data);
     }
+    // grab serial high and low bits -- pass a null event name to callback
+    // because this is internal use only
+    else if (packet.toString(undefined, 2,4) === 'SH') {
+        packet.copy(this.address_buf, 0, 5, 9)
+        this.find_callback_helper(null, frame_id, data);
+    }
+    else if (packet.toString(undefined, 2,4) === 'SL') {
+        packet.copy(this.address_buf, 4, 5, 9)
+        this.find_callback_helper(null, frame_id, data);
+    }
+
     // if ND -- discover all nodes
     else if (packet.toString(undefined, 2,4) === 'ND') {
         //console.log(packet.toString('hex').replace(/(.{2})/g, "$1 "));
@@ -279,7 +307,7 @@ XbeeDigiMesh.prototype.find_callback_helper = function(event_name, frame_id, dat
         callback(null, data);
     }
     // if there's no callback or the user wants the event anyway
-    if (callback === null || this.always_fire_event) {
+    if (callback === null || (this.always_fire_event && event_name)) {
         // send data via event
         this.emit(event_name, data);
     }
