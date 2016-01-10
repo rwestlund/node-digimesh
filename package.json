@@ -1,6 +1,6 @@
 {
     "name": "digimesh",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "XBee communication via the DigiMesh protocol",
     "keywords": [ "xbee", "digimesh", "wireless", "iot" ],
     "homepage": "https://github.com/rwestlund/node-digimesh",
