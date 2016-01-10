@@ -20,10 +20,7 @@
         "url": "https://github.com/rwestlund/node-digimesh.git"
     },
     "scripts": {
-        "test": "mocha --bail"
-    },
-    "bin": {
-        "mocha": "node_modules/.bin/mocha"
+        "test": "./node_modules/.bin/mocha --bail"
     },
     "dependencies": {
         "serialport": "2.0.6"
