@@ -42,6 +42,8 @@ var XbeeDigiMesh = function(config, callback) {
     this.address;
     // buffer version of address
     this.address_buf = new Buffer(8);
+    // true when open event has already passed
+    this.open;
 
     // CONSTANTS
     // start delimiter
@@ -127,6 +129,10 @@ var XbeeDigiMesh = function(config, callback) {
         // call when all three are done
         var complete = function() {
             that.address = that.read_addr(that.address_buf, 0);
+            // pass err to callback
+            if (callback && typeof callback === 'function') callback(err);
+            // set flag to indicate that event has passed
+            that.open = true;
             that.emit('open', err);
         }
         var num_complete = 0;
@@ -134,8 +140,6 @@ var XbeeDigiMesh = function(config, callback) {
         // set up with three functions:
         // update our NT value, drop the return status
         that.get_nt(function(err, data) {
-            // pass err to callback
-            if (callback && typeof callback === 'function') callback(err);
 
             num_complete++; if (num_complete === 3) complete();
         });
@@ -300,7 +304,7 @@ XbeeDigiMesh.prototype.find_callback_helper = function(event_name, frame_id, dat
     // if there's nothing there -- this should never happen
     if (callback === undefined) {
         this.emit('error', 'received transmit status for an invalid frame_id');
-        return console.err('received transmit status for an invalid frame_id');
+        return console.error('received transmit status for an invalid frame_id');
     }
     // if there's a valid callback
     else if (callback && typeof callback === 'function') {
