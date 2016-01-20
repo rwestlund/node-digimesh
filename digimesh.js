@@ -220,6 +220,7 @@ XbeeDigiMesh.prototype.handle_remote_at_command_response = function(packet) {
 XbeeDigiMesh.prototype.handle_at_command_response = function(packet) {
     var frame_id = packet[1];
     var data = {};
+    data.status = packet[4];
 
     // if there's an error
     if (packet[4]) {
@@ -228,11 +229,9 @@ XbeeDigiMesh.prototype.handle_at_command_response = function(packet) {
     // if NI response
     if (packet.toString(undefined, 2,4) === 'NI') {
         data.ni = packet.slice(5).toString();
-        data.status = packet[4];
         this.find_callback_helper('ni_string', frame_id, data);
     }
     else if (packet.toString(undefined, 2,4) === 'NT') {
-        data.status = packet[4];
         // timeout in ms -- this is two bytes, but can't be over 0xFC
         data.timeout = packet[6] * 100;
         if (data.status === this.AT_COMMAND_RESPONSE_STATUS_OK)
@@ -288,7 +287,8 @@ XbeeDigiMesh.prototype.handle_at_command_response = function(packet) {
         }
     }
     else {
-        console.warn('unhandled AT command response', packet.slice(2,4).toString());
+        data.command = packet.slice(2,4).toString();
+        this.find_callback_helper('at_command', frame_id, data);
     }
 };
 
@@ -398,6 +398,19 @@ XbeeDigiMesh.prototype.set_ni_string = function(ni, callback) {
 // Get the Network discover Timeout
 XbeeDigiMesh.prototype.get_nt = function(callback) {
     this.at_command_helper('NT', callback);
+};
+
+// Take a 128-bit hex string and set an encryption key
+XbeeDigiMesh.prototype.set_encryption_key = function(key, callback) {
+    var b = new Buffer(16);
+    this.write_addr(b, 0, key);
+    this.write_addr(b, 8, key.substring(16));
+    this.at_command_helper('KY', callback, b);
+};
+
+// Generic AT command -- pass a two char string and a buffer
+XbeeDigiMesh.prototype.at_command = function(command, value, callback) {
+    this.at_command_helper(command, callback, value);
 };
 
 
