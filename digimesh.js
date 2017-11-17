@@ -330,7 +330,7 @@ XbeeDigiMesh.prototype.find_callback_helper = function(event_name, frame_id, dat
 //          broadcast -- whether to broadcast or use the addr
 // callback -- callback to execute with return status
 XbeeDigiMesh.prototype.send_message = function(options, callback) {
-    var len = 17 + options.data.length;
+    var len = 14 + options.data.length;
     var tx_buf = new Buffer(len+4);
     // pick which address to use
     var addr = options.broadcast ? this.BROADCAST_ADDRESS : options.addr;
